@@ -149,7 +149,7 @@ stateDiagram-v2
   completed --> [*]
 ```
 
-- **Timestamp-driven:** each job's `progress` is derived from `startedAt` and `durationMs`, using an ease curve so it feels like real inference (fast start, slow middle, quick finish). A single 250 ms ticker (`useEngine`, mounted once in providers) does three things:
+- **Timestamp-driven:** each job's `progress` is derived from `startedAt` and `durationMs`, using an ease curve so it feels like real inference (fast start, slow middle, quick finish). A single 250 ms ticker (`<EngineTicker />`, mounted once in providers) does three things:
   1. recomputes progress for `processing` jobs,
   2. completes or fails jobs whose time is up,
   3. promotes `queued` jobs while there are free slots: `plan.concurrency` for credit jobs, and 1 per mode for unlimited jobs.
@@ -232,9 +232,9 @@ app/(app)/layout.tsx → <AuthGate> + <QueuePanel/> (right-side, collapsible)
 
 ## 8. Mock media
 
-- About 10 stylised clips (4–6 s, H.264, no audio), rendered from ffmpeg `lavfi` sources with grade, grain, vignette and slow push-ins. They come in 16:9, 9:16, 1:1 and 21:9.
-- Every clip has a WebP poster, and there are about 6 stills for image mode.
-- Total size is around 10–20 MB, and every file is far under 25 MiB.
+- 10 stylised clips (4–6 s, H.264, no audio), rendered from ffmpeg `lavfi` sources with grade, grain, vignette and slow push-ins. They come in 16:9, 9:16, 1:1, 4:5 and 21:9.
+- Every clip has a JPEG poster, which doubles as the still for image mode.
+- Total size is about 3.4 MiB, and every file is far under 25 MiB.
 - There are no third-party licensing issues: all the footage is synthetic and generated in-repo by `scripts/gen-media.sh`.
 
 ---
