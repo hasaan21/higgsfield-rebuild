@@ -1,6 +1,6 @@
 # Product Spec — "Higgsfield Rebuild"
 
-An AI-native cinematic creation suite modelled on Higgsfield Cinema Studio 4.0. Generation is **simulated client-side**, so the app runs at zero cost on static hosting.
+An AI-native cinematic creation suite modelled on Higgsfield Cinema Studio 4.0. By default generation is **simulated client-side**, so the app runs at zero cost on static hosting. With the Worker backend configured, it runs **live**: real vendor models, server-side credits and Stripe payments (section 4b).
 
 Research and sources: [docs/AUDIT.md](docs/AUDIT.md). Wherever this spec departs from Higgsfield, it says so.
 
@@ -15,13 +15,14 @@ Research and sources: [docs/AUDIT.md](docs/AUDIT.md). Wherever this spec departs
 | State | Zustand with the `persist` middleware (localStorage) | Stores: `session`, `studio`, `queue`, `library` |
 | Auth | `AuthProvider` interface with two implementations: Supabase (`@supabase/supabase-js`, browser client) or a localStorage mock | Supabase is used when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set at build time |
 | Media | Pre-rendered clips and stills in `public/media/`, generated with ffmpeg (no third-party or Higgsfield footage) | Each file is well under Cloudflare's 25 MiB per-asset limit |
-| Hosting | Cloudflare Workers static assets (`wrangler.jsonc` → `assets.directory: "./out"`), or Pages with build output `out` | `@cloudflare/next-on-pages` is deprecated and not used |
+| Hosting | Cloudflare Workers static assets (`wrangler.jsonc` → `assets.directory: "./out"`) | `@cloudflare/next-on-pages` is deprecated and not used |
+| Backend (live mode) | The same Worker (`worker/index.ts`) handles `/api/*` (`run_worker_first`), with R2 (`MEDIA`), Workflows (`GENERATE`), Supabase Postgres (service role) and Stripe | Off unless `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set; the client probes `GET /api/config` |
 
 ### Static-export constraints and how we handle them
 
 - **No middleware or server redirects.** Route protection happens on the client in `app/(app)/layout.tsx`: without a session it calls `router.replace('/login?next=…')`.
 - **No intercepting or parallel routes in export.** Detail views use query params (`/explore?item=<id>`) and render as a modal over the grid.
-- **No server actions or route handlers.** All mutation happens in client stores. Supabase talks directly from the browser.
+- **No server actions or route handlers.** In demo mode all mutation happens in client stores. In live mode the API is the Cloudflare Worker, not Next.js, and the stores cache what it returns.
 - **`next/image` optimisation is off** (`images.unoptimized: true`).
 
 ---
@@ -122,6 +123,12 @@ cost(params) = ceil( base × (duration / 5) × resolutionFactor[res] × stackFac
 - `quote(params, user)` returns `{ cost, unlimited, lines[], affordable, blockedReason }`. Its output drives both the Generate badge and the paywall.
 - **Unlimited:** if `model.unlimitedOn` includes the user's plan, the cost is 0. Those jobs share a single "unlimited lane" per mode, so they run one at a time, as in S5.
 - **Debit and refund:** credits are debited at submit (a ledger entry). A `failed` job is refunded in full; this is our policy, since Higgsfield does not refund. A `cancelled` job is refunded only if it was still `queued`.
+- **Vendor floor:** a model with a vendor API never costs less than `ceil½(vendorUsd × 1.25 / CREDIT_USD_FLOOR)`. `CREDIT_USD_FLOOR` is the cheapest price at which we sell a credit, across plans and packs ($0.033, Ultra). When the floor applies, the breakdown shows "Raised to cover {vendor}'s cost". `pnpm check:margins` checks every live setting.
+- **Vendor limits** are part of validation (`validateForModel`), so the quote blocks settings the vendor would reject:
+  - Veo 1080p/4K, and Veo with subject references, need 8 s.
+  - Seedance can't combine subject references with 1080p.
+  - A last frame needs a first frame.
+- **Unlimited on live models** is capped at 30 jobs per user per day (`UNLIMITED_DAILY_CAP`). After that, jobs are charged normally. The server's charge is authoritative.
 
 ### Plans (demo values, from S5 and S11)
 
@@ -132,7 +139,7 @@ cost(params) = ceil( base × (duration / 5) × resolutionFactor[res] × stackFac
 | Plus | 49 | 1,000 | 4 | All; Unlimited on Kling 3.0 and Soul 2.0 | No |
 | Ultra | 99 | 3,000 | 8 | All; Unlimited on Kling 3.0, Seedance 2.0, Soul 2.0 and Nano Banana | No |
 
-On `/pricing`, choosing a plan switches to it immediately. This is a **demo checkout**: it grants the plan's credits and writes a ledger entry.
+In demo mode, choosing a plan on `/pricing` switches to it immediately. This is a **demo checkout**: it grants the plan's credits and writes a ledger entry. In live mode, the same buttons open Stripe Checkout. A subscription grants the plan's credits on every paid invoice. Packs grant credits when checkout completes. Plan changes and cancellations go through the Stripe customer portal.
 
 ---
 
@@ -163,6 +170,46 @@ stateDiagram-v2
   - extend adds 5 s,
   - reframe changes the aspect ratio,
   - lipsync turns on audio.
+
+## 4b. Live backend (`worker/`)
+
+Same state machine, run on the server. Postgres (`generations`) is the source of truth; the browser's queue store is a cache of it.
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant W as Worker /api
+  participant DB as Supabase
+  participant WF as GenerateWorkflow
+  participant V as Vendor API
+  B->>W: POST /api/generations {id, params}
+  W->>DB: debit_for_generation (re-quoted server-side)
+  W->>WF: create({id})
+  WF->>DB: claim_slot (loop, durable sleep)
+  WF->>V: submit
+  loop until done (max 45 min)
+    WF->>V: poll (step.sleep between)
+  end
+  WF->>WF: copy output into R2
+  WF->>DB: finish_generation (failed → refund)
+  B->>W: GET /api/generations?since= (every 3 s)
+```
+
+- **Adapters** (`worker/providers/`): each one implements `submit` and `poll`.
+  - Kling 3.0/2.6 use the Kling API directly.
+  - Veo 3.1 and Nano Banana 2.1 use the Gemini API. Nano Banana is synchronous, so it stores the image during submit.
+  - Seedance 2.0/2.5 use BytePlus ModelArk.
+  - Wan 2.7 uses Alibaba DashScope.
+  - `mock` reuses `lib/engine.ts`.
+- **Which adapter runs:** a model uses its vendor adapter when that vendor's key is set, otherwise `mock`. Derived actions always use `mock`. Kling o1, Cinema Studio and the Soul models have no public API.
+- **Errors:** a vendor 4xx (other than 408/429) is a `NonRetryableError`, so the job fails at once. Network errors and 5xx responses retry with backoff.
+- **References:** uploads go to R2 under `u/{userId}/refs/`. Adapters send frame and subject references as bytes (base64 or inline data), so vendors never need to reach our URLs. Wan is the exception: it takes a signed public URL.
+- **Media:** R2 objects are served at `/api/media/<key>?exp&sig` (HMAC-SHA256 links that expire after 24 h, with Range support for video seeking). Links are re-signed on every list request. Video outputs have no poster; the card shows the first frame.
+- **Money:** every balance change happens in one `security definer` SQL function that locks the user's profile row:
+  - debit, refund, grant, claim slot, finish and cancel;
+  - client-supplied job ids make submit idempotent;
+  - Stripe grants are idempotent via `credit_ledger.idempotency_key` and the `stripe_events` table.
+- **Progress:** the client animates progress from `startedAt` and the expected duration (the vendor's typical ETA), capped at 95% until the server reports `completed`.
 
 ---
 
@@ -248,4 +295,5 @@ app/(app)/layout.tsx → <AuthGate> + <QueuePanel/> (right-side, collapsible)
 | P2 | Explore masonry, detail modal, Remix |
 | P3 | Library and quick actions with provenance download; Characters (Soul ID and Soul Cast) |
 | P4 | Landing, pricing and paywall; empty and error states; responsive pass; README and deploy |
-| Later | Real provider adapters behind `GenerationBackend` (fal / Replicate); Supabase tables for the library and ledger; Explore publishing; projects |
+| P5 | Live mode: Worker API, vendor adapters (Kling, Veo, Nano Banana, Seedance, Wan), Workflows, R2 media, Supabase credits and generations, Stripe checkout, portal and webhook |
+| Later | Vendor posters/thumbnails; real upscale, extend and lip sync; server-side Characters; Explore publishing; projects |
