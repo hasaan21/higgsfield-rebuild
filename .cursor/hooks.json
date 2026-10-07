@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      { "command": "/usr/bin/python3 .cursor/hooks/agent_log.py beforeSubmitPrompt", "timeout": 10 }
+    ],
+    "afterAgentResponse": [
+      { "command": "/usr/bin/python3 .cursor/hooks/agent_log.py afterAgentResponse", "timeout": 10 }
+    ],
+    "stop": [
+      { "command": "/usr/bin/python3 .cursor/hooks/agent_log.py stop", "timeout": 10 }
+    ]
+  }
+}
