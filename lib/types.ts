@@ -155,6 +155,7 @@ export interface SoulCastParams {
 
 export interface Character {
   id: string;
+  userId: string;
   name: string;
   kind: "soul-id" | "soul-cast";
   status: "training" | "ready" | "failed";
