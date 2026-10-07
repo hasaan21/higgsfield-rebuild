@@ -1,4 +1,4 @@
-import { createClient, type User as SupabaseUser } from "@supabase/supabase-js";
+import { createClient, type AuthError, type User as SupabaseUser } from "@supabase/supabase-js";
 import type { AuthIdentity, AuthProvider } from "@/lib/auth/provider";
 import type { AuthProviderId } from "@/lib/types";
 
@@ -20,6 +20,14 @@ function toIdentity(u: SupabaseUser | null | undefined): AuthIdentity | null {
     avatarUrl: meta.avatar_url,
     provider,
   };
+}
+
+/** Supabase's built-in mailer allows only a few emails per hour per project. */
+function friendly(error: AuthError): Error {
+  if (error.code === "over_email_send_rate_limit") {
+    return new Error("We can't send more confirmation emails right now. Please try again in a little while.");
+  }
+  return error;
 }
 
 export function createSupabaseProvider(url: string, key: string): AuthProvider {
@@ -48,12 +56,12 @@ export function createSupabaseProvider(url: string, key: string): AuthProvider {
     },
     async signUp(email, password, name) {
       const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
-      if (error) throw error;
+      if (error) throw friendly(error);
       return toIdentity(data.session?.user ?? null);
     },
     async resetPassword(email) {
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/login/` });
-      if (error) throw error;
+      if (error) throw friendly(error);
     },
     async signOut() {
       await supabase.auth.signOut();

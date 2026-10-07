@@ -36,7 +36,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 ```
 
-The default **Email** provider is enough: Supabase's built-in mailer is free, though rate-limited. For quick testing, turn off **Confirm email** under Authentication → Sign In / Providers. Add `<your-origin>/login/` to the redirect URLs. Without the Worker backend, credits and generations stay in the browser.
+The default **Email** provider is enough. Supabase's built-in mailer is free, but it only sends a couple of emails per hour per project. After that, sign-ups fail with "email rate limit exceeded". For a clone, turn off **Confirm email** under Authentication → Sign In / Providers → Email: sign-up then logs the user straight in and sends no email. If you want confirmation emails, add your own SMTP server under Authentication → Emails → SMTP Settings. Add `<your-origin>/login/` to the redirect URLs. Without the Worker backend, credits and generations stay in the browser.
 
 ## Live mode (free setup)
 
@@ -46,10 +46,11 @@ The client switches to live mode when Supabase is configured **and** `GET /api/c
 
 1. Create a project (the free tier is fine).
 2. Run [`supabase/migrations/0001_billing.sql`](supabase/migrations/0001_billing.sql) in the SQL editor, or use `supabase db push`. It creates `profiles`, `credit_ledger`, `generations` and `stripe_events`. Users can only read their own rows. Every write goes through `security definer` functions that only the service role can call, so balances can't be edited from the browser. New sign-ups get a profile with 3 free generations.
-3. Under Authentication → URL Configuration:
+3. Under Authentication → Sign In / Providers → Email, turn off **Confirm email**. Otherwise the built-in mailer's hourly limit blocks new sign-ups (see [Real auth with Supabase](#real-auth-with-supabase)).
+4. Under Authentication → URL Configuration:
    - Set the **Site URL** to your Worker URL.
    - Add `<worker-url>/login/` and `http://localhost:3000/login/` to the redirect URLs.
-4. Put the project URL and publishable (anon) key in `.env.local`, as in [Real auth with Supabase](#real-auth-with-supabase). They're public and get inlined at build time.
+5. Put the project URL and publishable (anon) key in `.env.local`, as in [Real auth with Supabase](#real-auth-with-supabase). They're public and get inlined at build time.
 
 ### 2. Cloudflare
 
