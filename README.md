@@ -107,13 +107,13 @@ Every model that has a vendor API costs at least the vendor's per-second or per-
 | `pnpm cf-typegen` | Regenerate `worker/worker-configuration.d.ts` after changing bindings |
 | `pnpm media` | Re-render the mock clips in `public/media/` (needs ffmpeg) |
 | `pnpm preview` | Build, then run the site and API on the local Workers runtime |
-| `pnpm deploy` | Build, then `wrangler deploy` |
+| `pnpm run deploy` | Build, then `wrangler deploy` |
 
 ## Deploy to Cloudflare
 
 ```bash
 npx wrangler login
-pnpm deploy
+pnpm run deploy
 ```
 
 `wrangler.jsonc` serves `./out` as static assets with `not_found_handling: "404-page"`, and runs the Worker first only for `/api/*`. Supabase env vars must be present at **build** time, because they're inlined into the static bundle.
