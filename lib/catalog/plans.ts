@@ -53,3 +53,12 @@ export const CREDIT_PACKS = [
   { id: "pack-500", credits: 500, price: 22 },
   { id: "pack-2000", credits: 2000, price: 80 },
 ];
+
+/** The least a credit can be bought for (USD), across plans and packs. Live-model prices are floored against it. */
+export const CREDIT_USD_FLOOR = Math.min(
+  ...PLANS.filter((p) => p.credits > 0).map((p) => p.priceMonthly / p.credits),
+  ...CREDIT_PACKS.map((p) => p.price / p.credits),
+);
+
+/** Unlimited lanes still cost real money on live models; past this many jobs a day they're charged normally. */
+export const UNLIMITED_DAILY_CAP = 30;

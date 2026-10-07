@@ -1,11 +1,12 @@
-import type { ModelSpec } from "@/lib/types";
-
-const ALL_RATIOS = ["16:9", "9:16", "1:1", "4:5"] as const;
+import type { Mode, ModelSpec, Resolution } from "@/lib/types";
 
 /**
  * Base rates reproduce Higgsfield's published examples (docs/AUDIT.md, S5) where available:
  * Kling 3.0 10 / 12.5 / 20 / 25, Seedance 2.0 23 / 45 / 45 / 90, Cinema Studio 25 / 50 / 50 / 100, Wan 2.7 8 / 13 / 15 / 25.
  * Other models are estimated and marked as such in the UI copy.
+ *
+ * Limits and `api.vendorCostUsd` follow each vendor's API docs and list prices as of Oct 2026. For models with an `api`,
+ * `lib/pricing.ts` never charges less than the vendor cost plus margin, so some published rates are raised.
  */
 export const MODELS: ModelSpec[] = [
   {
@@ -17,7 +18,7 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 25, resolution: { "720p": 1, "1080p": 2, "4k": 3.2 } },
     durations: [5, 10, 15, 20, 30],
     resolutions: ["720p", "1080p", "4k"],
-    aspectRatios: [...ALL_RATIOS, "21:9"],
+    aspectRatios: ["16:9", "9:16", "1:1", "4:5", "21:9"],
     maxReferences: 50,
     supports: { firstLast: true, motionRef: true, audio: true, cinema: true },
     minPlan: "basic",
@@ -31,16 +32,22 @@ export const MODELS: ModelSpec[] = [
     vendor: "ByteDance",
     mode: "video",
     tagline: "The most advanced video model — native audio, lip-sync and SFX",
-    pricing: { base: 28, resolution: { "720p": 1, "1080p": 2, "4k": 3.4 } },
+    pricing: { base: 28, resolution: { "480p": 0.6, "720p": 1 } },
     durations: [5, 10, 15],
-    resolutions: ["720p", "1080p", "4k"],
-    aspectRatios: [...ALL_RATIOS, "21:9"],
+    resolutions: ["480p", "720p"],
+    aspectRatios: ["16:9", "9:16", "1:1", "21:9"],
     maxReferences: 9,
-    supports: { firstLast: true, motionRef: true, audio: true, cinema: false },
+    supports: { firstLast: true, motionRef: false, audio: true, cinema: false },
     minPlan: "plus",
     unlimitedOn: [],
     simSeconds: 16,
     badge: "new",
+    api: {
+      provider: "byteplus",
+      vendorModelId: "dreamina-seedance-2-5-260628",
+      vendorCostUsd: { "480p": 0.103, "720p": 0.231 },
+      etaSeconds: 120,
+    },
   },
   {
     id: "seedance-2-0",
@@ -51,12 +58,18 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 23, resolution: { "720p": 1, "1080p": 1.96 } },
     durations: [5, 10],
     resolutions: ["720p", "1080p"],
-    aspectRatios: [...ALL_RATIOS],
+    aspectRatios: ["16:9", "9:16", "1:1", "21:9"],
     maxReferences: 9,
-    supports: { firstLast: true, motionRef: true, audio: true, cinema: false },
+    supports: { firstLast: true, motionRef: false, audio: true, cinema: false },
     minPlan: "basic",
     unlimitedOn: ["ultra"],
     simSeconds: 14,
+    api: {
+      provider: "byteplus",
+      vendorModelId: "dreamina-seedance-2-0-260128",
+      vendorCostUsd: { "720p": 0.15, "1080p": 0.37 },
+      etaSeconds: 90,
+    },
   },
   {
     id: "kling-3-0",
@@ -64,15 +77,22 @@ export const MODELS: ModelSpec[] = [
     vendor: "Kuaishou",
     mode: "video",
     tagline: "The new standard in photorealism with complex motion",
-    pricing: { base: 10, resolution: { "720p": 1, "1080p": 1.25 } },
-    durations: [5, 10],
-    resolutions: ["720p", "1080p"],
-    aspectRatios: [...ALL_RATIOS],
-    maxReferences: 4,
-    supports: { firstLast: true, motionRef: true, audio: true, cinema: false },
+    pricing: { base: 10, resolution: { "720p": 1, "1080p": 1.25, "4k": 3 } },
+    durations: [5, 10, 15],
+    resolutions: ["720p", "1080p", "4k"],
+    aspectRatios: ["16:9", "9:16", "1:1"],
+    maxReferences: 0,
+    supports: { firstLast: true, motionRef: false, audio: true, cinema: false },
     minPlan: "free",
     unlimitedOn: ["plus", "ultra"],
     simSeconds: 10,
+    api: {
+      provider: "kling",
+      vendorModelId: "kling-3.0",
+      vendorCostUsd: { "720p": 0.084, "1080p": 0.112, "4k": 0.42 },
+      vendorCostUsdWithAudio: { "720p": 0.126, "1080p": 0.168, "4k": 0.42 },
+      etaSeconds: 120,
+    },
   },
   {
     id: "kling-o1",
@@ -83,7 +103,7 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 16, resolution: { "720p": 1, "1080p": 1.4 } },
     durations: [5, 10],
     resolutions: ["720p", "1080p"],
-    aspectRatios: [...ALL_RATIOS],
+    aspectRatios: ["16:9", "9:16", "1:1"],
     maxReferences: 7,
     supports: { firstLast: true, motionRef: false, audio: false, cinema: false },
     minPlan: "plus",
@@ -99,12 +119,18 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 7, resolution: { "720p": 1, "1080p": 1.3 } },
     durations: [5, 10],
     resolutions: ["720p", "1080p"],
-    aspectRatios: [...ALL_RATIOS],
-    maxReferences: 2,
+    aspectRatios: ["16:9", "9:16", "1:1"],
+    maxReferences: 0,
     supports: { firstLast: true, motionRef: false, audio: false, cinema: false },
     minPlan: "free",
     unlimitedOn: [],
     simSeconds: 8,
+    api: {
+      provider: "kling",
+      vendorModelId: "kling-2.6",
+      vendorCostUsd: { "720p": 0.042, "1080p": 0.07 },
+      etaSeconds: 90,
+    },
   },
   {
     id: "veo-3-1",
@@ -114,6 +140,7 @@ export const MODELS: ModelSpec[] = [
     tagline: "Crystal-clear 4K with native cinematic visual flow",
     pricing: { base: 30, resolution: { "720p": 1, "1080p": 1.6, "4k": 2.8 } },
     durations: [4, 6, 8],
+    durationsByResolution: { "1080p": [8], "4k": [8] },
     resolutions: ["720p", "1080p", "4k"],
     aspectRatios: ["16:9", "9:16"],
     maxReferences: 3,
@@ -121,22 +148,12 @@ export const MODELS: ModelSpec[] = [
     minPlan: "plus",
     unlimitedOn: [],
     simSeconds: 17,
-  },
-  {
-    id: "sora-2",
-    name: "Sora 2",
-    vendor: "OpenAI",
-    mode: "video",
-    tagline: "Deep world simulation with accurate physics and object permanence",
-    pricing: { base: 26, resolution: { "720p": 1, "1080p": 1.8 } },
-    durations: [4, 8, 12],
-    resolutions: ["720p", "1080p"],
-    aspectRatios: ["16:9", "9:16"],
-    maxReferences: 1,
-    supports: { firstLast: false, motionRef: false, audio: true, cinema: false },
-    minPlan: "plus",
-    unlimitedOn: [],
-    simSeconds: 16,
+    api: {
+      provider: "google",
+      vendorModelId: "veo-3.1-generate-preview",
+      vendorCostUsd: { "720p": 0.4, "1080p": 0.4, "4k": 0.6 },
+      etaSeconds: 90,
+    },
   },
   {
     id: "wan-2-7",
@@ -144,15 +161,21 @@ export const MODELS: ModelSpec[] = [
     vendor: "Alibaba",
     mode: "video",
     tagline: "The balance of generation speed and visual richness",
-    pricing: { base: 8, resolution: { "480p": 0.6, "720p": 1, "1080p": 1.63 }, durationExponent: 0.926 },
-    durations: [5, 10],
-    resolutions: ["480p", "720p", "1080p"],
-    aspectRatios: [...ALL_RATIOS],
-    maxReferences: 3,
-    supports: { firstLast: true, motionRef: true, audio: false, cinema: false },
+    pricing: { base: 8, resolution: { "720p": 1, "1080p": 1.63 }, durationExponent: 0.926 },
+    durations: [5, 10, 15],
+    resolutions: ["720p", "1080p"],
+    aspectRatios: ["16:9", "9:16", "1:1"],
+    maxReferences: 0,
+    supports: { firstLast: true, motionRef: false, audio: false, cinema: false },
     minPlan: "free",
     unlimitedOn: [],
     simSeconds: 7,
+    api: {
+      provider: "alibaba",
+      vendorModelId: "wan2.7-t2v",
+      vendorCostUsd: { "720p": 0.1, "1080p": 0.15 },
+      etaSeconds: 180,
+    },
   },
   {
     id: "soul-2",
@@ -163,7 +186,7 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 2, resolution: { "1080p": 1, "4k": 2 } },
     durations: [0],
     resolutions: ["1080p", "4k"],
-    aspectRatios: [...ALL_RATIOS, "21:9"],
+    aspectRatios: ["16:9", "9:16", "1:1", "4:5", "21:9"],
     maxReferences: 4,
     supports: { firstLast: false, motionRef: false, audio: false, cinema: false },
     minPlan: "free",
@@ -179,7 +202,7 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 3, resolution: { "1080p": 1, "4k": 2 } },
     durations: [0],
     resolutions: ["1080p", "4k"],
-    aspectRatios: [...ALL_RATIOS, "21:9"],
+    aspectRatios: ["16:9", "9:16", "1:1", "4:5", "21:9"],
     maxReferences: 14,
     supports: { firstLast: false, motionRef: false, audio: false, cinema: true },
     minPlan: "basic",
@@ -196,21 +219,58 @@ export const MODELS: ModelSpec[] = [
     pricing: { base: 2, resolution: { "1080p": 1, "4k": 2.5 } },
     durations: [0],
     resolutions: ["1080p", "4k"],
-    aspectRatios: [...ALL_RATIOS, "21:9"],
+    aspectRatios: ["16:9", "9:16", "1:1", "4:5", "21:9"],
     maxReferences: 14,
     supports: { firstLast: false, motionRef: false, audio: false, cinema: false },
     minPlan: "free",
     unlimitedOn: ["ultra"],
     simSeconds: 5,
+    api: {
+      provider: "google",
+      vendorModelId: "gemini-nano-banana-2.1",
+      vendorCostUsd: { "1080p": 0.0504, "4k": 0.0756 },
+      etaSeconds: 20,
+    },
   },
 ];
 
-export const MODEL_BY_ID = Object.fromEntries(MODELS.map((m) => [m.id, m])) as Record<string, ModelSpec>;
+/** No longer selectable, but still resolvable so older library items and seeds keep their name. */
+const RETIRED: ModelSpec[] = [
+  {
+    id: "sora-2",
+    name: "Sora 2 (retired)",
+    vendor: "OpenAI",
+    mode: "video",
+    tagline: "OpenAI shut down the Sora API on Sep 24, 2026",
+    pricing: { base: 26, resolution: { "720p": 1, "1080p": 1.8 } },
+    durations: [4, 8, 12],
+    resolutions: ["720p", "1080p"],
+    aspectRatios: ["16:9", "9:16"],
+    maxReferences: 1,
+    supports: { firstLast: false, motionRef: false, audio: true, cinema: false },
+    minPlan: "plus",
+    unlimitedOn: [],
+    simSeconds: 16,
+  },
+];
+
+export const MODEL_BY_ID = Object.fromEntries([...MODELS, ...RETIRED].map((m) => [m.id, m])) as Record<string, ModelSpec>;
+
+export const isRetired = (id: string) => RETIRED.some((m) => m.id === id);
 
 export function getModel(id: string): ModelSpec {
   return MODEL_BY_ID[id] ?? MODELS[0];
 }
 
-export function defaultModelFor(mode: "video" | "image"): ModelSpec {
-  return mode === "video" ? MODEL_BY_ID["cinema-studio-4"] : MODEL_BY_ID["soul-cinema"];
+const STATIC_DEFAULT: Record<Mode, string> = { video: "cinema-studio-4", image: "soul-cinema" };
+const LIVE_DEFAULT: Record<Mode, string> = { video: "kling-3-0", image: "nano-banana-2-1" };
+
+/** With `liveModelIds` from the backend, prefer a model that really generates over a demo-only one. */
+export function defaultModelFor(mode: Mode, liveModelIds?: readonly string[]): ModelSpec {
+  if (liveModelIds?.includes(LIVE_DEFAULT[mode])) return MODEL_BY_ID[LIVE_DEFAULT[mode]];
+  return MODEL_BY_ID[STATIC_DEFAULT[mode]];
+}
+
+export function durationsFor(model: ModelSpec, resolution: Resolution): number[] {
+  return model.durationsByResolution?.[resolution] ?? model.durations;
 }

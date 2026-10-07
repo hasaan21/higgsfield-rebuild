@@ -1,5 +1,5 @@
-import { getModel } from "@/lib/catalog/models";
-import { PLAN_BY_ID, PLAN_RANK } from "@/lib/catalog/plans";
+import { durationsFor, getModel, isRetired } from "@/lib/catalog/models";
+import { CREDIT_USD_FLOOR, PLAN_BY_ID, PLAN_RANK } from "@/lib/catalog/plans";
 import type { GenerationAction, ModelSpec, PlanId, StudioParams, User } from "@/lib/types";
 
 export interface QuoteLine {
@@ -24,12 +24,26 @@ export interface Quote {
 }
 
 const half = (n: number) => Math.round(n * 2) / 2;
+const halfUp = (n: number) => Math.ceil(n * 2) / 2;
+
+/** Credits must cover the vendor bill with this much headroom, even at the cheapest credit price. */
+export const VENDOR_MARKUP = 1.25;
 
 export function formatCredits(n: number) {
   return Number.isInteger(n) ? n.toLocaleString() : n.toFixed(1);
 }
 
-export function baseCost(model: ModelSpec, params: Pick<StudioParams, "duration" | "resolution" | "camera" | "references">) {
+type CostParams = Pick<StudioParams, "duration" | "resolution" | "camera" | "references"> & { audio?: boolean };
+
+/** What the vendor bills us for one job, in USD. Zero for models that only run on the mock engine. */
+export function vendorCostUsd(model: ModelSpec, params: Pick<StudioParams, "duration" | "resolution"> & { audio?: boolean }): number {
+  if (!model.api) return 0;
+  const withAudio = params.audio && model.supports.audio ? model.api.vendorCostUsdWithAudio?.[params.resolution] : undefined;
+  const rate = withAudio ?? model.api.vendorCostUsd[params.resolution] ?? Math.max(...Object.values(model.api.vendorCostUsd));
+  return model.mode === "video" ? rate * params.duration : rate;
+}
+
+export function baseCost(model: ModelSpec, params: CostParams) {
   const resFactor = model.pricing.resolution[params.resolution] ?? 1;
   const durationFactor = model.mode === "video" ? Math.pow(params.duration / 5, model.pricing.durationExponent ?? 1) : 1;
   const extraMoves = model.mode === "video" ? Math.max(0, params.camera.moves.length - 1) : 0;
@@ -37,6 +51,8 @@ export function baseCost(model: ModelSpec, params: Pick<StudioParams, "duration"
   const subjectRefs = params.references.filter((r) => r.slot === "subject").length;
   const refSurcharge = 2 * Math.floor(subjectRefs / 10);
   const raw = model.pricing.base * durationFactor * resFactor;
+  const published = half(raw * stackFactor + refSurcharge);
+  const vendorFloor = halfUp((vendorCostUsd(model, params) * VENDOR_MARKUP) / CREDIT_USD_FLOOR);
   return {
     raw,
     resFactor,
@@ -44,7 +60,9 @@ export function baseCost(model: ModelSpec, params: Pick<StudioParams, "duration"
     stackFactor,
     extraMoves,
     refSurcharge,
-    total: half(raw * stackFactor + refSurcharge),
+    published,
+    vendorFloor,
+    total: Math.max(published, vendorFloor),
   };
 }
 
@@ -64,6 +82,7 @@ export function quote(params: StudioParams, user: User | null, action: Generatio
     lines.push({ label: `Resolution ${params.resolution}`, value: `×${b.resFactor}` });
     if (b.extraMoves) lines.push({ label: `${b.extraMoves} stacked move${b.extraMoves > 1 ? "s" : ""}`, value: `×${b.stackFactor.toFixed(1)}`, ours: true });
     if (b.refSurcharge) lines.push({ label: "Heavy reference stack", value: `+${b.refSurcharge} cr`, ours: true });
+    if (b.vendorFloor > b.published) lines.push({ label: `Raised to cover ${model.vendor}'s cost`, value: `${formatCredits(b.vendorFloor)} cr`, ours: true });
     cost = b.total;
   } else {
     cost = actionCost(action, params);
@@ -72,6 +91,10 @@ export function quote(params: StudioParams, user: User | null, action: Generatio
 
   if (!params.prompt.trim() && action === "generate" && !params.references.length) {
     return { cost, unlimited: false, freeTier: false, lines, balanceAfter: null, blocked: { kind: "invalid", message: "Describe your shot or add a reference" } };
+  }
+  const invalid = action === "generate" ? validateForModel(model, params) : null;
+  if (invalid) {
+    return { cost, unlimited: false, freeTier: false, lines, balanceAfter: null, blocked: { kind: "invalid", message: invalid } };
   }
   if (!user) {
     return { cost, unlimited: false, freeTier: false, lines, balanceAfter: null, blocked: { kind: "auth", message: "Sign in to generate" } };
@@ -97,6 +120,24 @@ export function quote(params: StudioParams, user: User | null, action: Generatio
     };
   }
   return { cost, unlimited: false, freeTier: false, lines, balanceAfter: user.credits - cost, blocked: null };
+}
+
+/** Vendor rules that settings alone can't express. Returns a user-facing message, or null when the job is valid. */
+export function validateForModel(model: ModelSpec, params: StudioParams): string | null {
+  if (isRetired(model.id)) return `${model.name.replace(" (retired)", "")} is no longer available — pick another model`;
+  if (model.mode === "video" && !durationsFor(model, params.resolution).includes(params.duration)) {
+    return `${model.name} at ${params.resolution} only supports ${durationsFor(model, params.resolution).join(", ")}s`;
+  }
+  if (model.id === "veo-3-1" && params.references.some((r) => r.slot === "subject") && params.duration !== 8) {
+    return "Veo 3.1 needs an 8s duration when using subject references";
+  }
+  if (model.api?.provider === "byteplus" && params.resolution === "1080p" && params.references.some((r) => r.slot === "subject")) {
+    return `${model.name} can't use subject references at 1080p — switch to 720p`;
+  }
+  if (params.references.some((r) => r.slot === "last") && !params.references.some((r) => r.slot === "first")) {
+    return "Add a first frame to use a last frame";
+  }
+  return null;
 }
 
 export const ACTION_LABEL: Record<GenerationAction, string> = {

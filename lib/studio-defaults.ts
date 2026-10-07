@@ -1,4 +1,4 @@
-import { defaultModelFor, getModel, MODEL_BY_ID } from "@/lib/catalog/models";
+import { defaultModelFor, durationsFor, getModel, isRetired, MODEL_BY_ID } from "@/lib/catalog/models";
 import { MAX_STACKED_MOVES, MOVE_BY_ID } from "@/lib/catalog/camera";
 import { APERTURES, CAMERA_BODIES, LENSES } from "@/lib/catalog/camera";
 import { ERAS, GENRES, LIGHTING, PALETTES, TEMPOS } from "@/lib/catalog/film";
@@ -28,12 +28,13 @@ const known = (list: Option[], id: string, fallback = "auto") => (list.some((o) 
 
 /** Clamp any params (e.g. from a remix or an old persisted store) to what the chosen model supports. */
 export function normalizeParams(input: StudioParams): StudioParams {
-  const model: ModelSpec = MODEL_BY_ID[input.modelId] ?? defaultModelFor(input.mode);
+  const model: ModelSpec = (!isRetired(input.modelId) && MODEL_BY_ID[input.modelId]) || defaultModelFor(input.mode);
   const p: StudioParams = structuredClone(input);
   p.modelId = model.id;
   p.mode = model.mode;
-  if (!model.durations.includes(p.duration)) p.duration = model.durations[0];
   if (!model.resolutions.includes(p.resolution)) p.resolution = model.resolutions[0];
+  const durations = durationsFor(model, p.resolution);
+  if (!durations.includes(p.duration)) p.duration = durations[0];
   if (!model.aspectRatios.includes(p.aspectRatio)) p.aspectRatio = model.aspectRatios[0];
   if (!model.supports.audio) p.audio = false;
   p.film = {

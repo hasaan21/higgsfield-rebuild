@@ -3,6 +3,19 @@ export type Resolution = "480p" | "720p" | "1080p" | "4k";
 export type AspectRatio = "16:9" | "9:16" | "1:1" | "4:5" | "21:9";
 export type PlanId = "free" | "basic" | "plus" | "ultra";
 
+export type ProviderId = "kling" | "google" | "byteplus" | "alibaba";
+
+/** How a model is reached on its vendor's own API. Models without one only ever run on the mock engine. */
+export interface VendorApi {
+  provider: ProviderId;
+  vendorModelId: string;
+  /** Vendor list price in USD per output second (video) or per image, by resolution. */
+  vendorCostUsd: Partial<Record<Resolution, number>>;
+  vendorCostUsdWithAudio?: Partial<Record<Resolution, number>>;
+  /** Typical wall-clock time for one job; drives the estimated progress bar. */
+  etaSeconds: number;
+}
+
 export interface ModelSpec {
   id: string;
   name: string;
@@ -12,6 +25,8 @@ export interface ModelSpec {
   /** base = credits per 5 s at 720p (video) or per image at 1080p (image). */
   pricing: { base: number; resolution: Partial<Record<Resolution, number>>; durationExponent?: number };
   durations: number[];
+  /** Resolutions that only allow some durations (Veo: 1080p and 4K are 8 s only). */
+  durationsByResolution?: Partial<Record<Resolution, number[]>>;
   resolutions: Resolution[];
   aspectRatios: AspectRatio[];
   maxReferences: number;
@@ -20,6 +35,7 @@ export interface ModelSpec {
   unlimitedOn: PlanId[];
   simSeconds: number;
   badge?: "new" | "top";
+  api?: VendorApi;
 }
 
 export type MoveGroup = "static" | "dolly" | "crane" | "pan-tilt" | "orbit" | "zoom" | "drone" | "handheld" | "fx";
@@ -45,6 +61,8 @@ export interface Reference {
   kind: "image" | "video";
   name: string;
   url: string;
+  /** R2 object key for uploads made through the backend; `url` is then a short-lived signed link. */
+  key?: string;
   missing?: boolean;
 }
 
@@ -106,9 +124,12 @@ export type GenerationAction = "generate" | "upscale" | "extend" | "reframe" | "
 export interface MediaRef {
   kind: "video" | "image";
   src: string;
+  /** Empty when the vendor returned no still; video players then show the first frame. */
   poster: string;
   width: number;
   height: number;
+  /** R2 object key when the file is stored by the backend. */
+  key?: string;
 }
 
 export interface Generation {
@@ -133,6 +154,8 @@ export interface Generation {
   favorite: boolean;
   remixOf?: string;
   watermark: boolean;
+  /** Set by the backend: which engine produced (or is producing) this job. */
+  provider?: ProviderId | "mock";
 }
 
 export interface SoulCastParams {

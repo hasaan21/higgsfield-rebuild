@@ -10,7 +10,7 @@ import { OptionTiles, Segmented } from "@/components/studio/option-tiles";
 import { ReferenceTray } from "@/components/studio/reference-tray";
 import { APERTURES, CAMERA_BODIES, LENSES, MOVE_BY_ID } from "@/lib/catalog/camera";
 import { ASPECT_LABEL, EMOTIONS, ERAS, GENRES, LIGHTING, optionName, PALETTES, RESOLUTION_LABEL, TEMPOS } from "@/lib/catalog/film";
-import { getModel } from "@/lib/catalog/models";
+import { durationsFor, getModel } from "@/lib/catalog/models";
 import { useUser } from "@/lib/hooks";
 import { useLibrary } from "@/lib/stores/library";
 import { useStudio } from "@/lib/stores/studio";
@@ -103,12 +103,25 @@ export function CreationDrawer() {
         {isVideo && (
           <div>
             <FieldLabel hint={`${model.name} supports up to ${Math.max(...model.durations)}s`}>Duration</FieldLabel>
-            <Segmented options={model.durations} value={p.duration} onChange={(duration) => update({ duration })} format={(d) => `${d}s`} />
+            <Segmented options={durationsFor(model, p.resolution)} value={p.duration} onChange={(duration) => update({ duration })} format={(d) => `${d}s`} />
+            {model.durationsByResolution?.[p.resolution] && (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                {model.name} renders {RESOLUTION_LABEL[p.resolution]} at {durationsFor(model, p.resolution).join("/")}s only.
+              </p>
+            )}
           </div>
         )}
         <div>
           <FieldLabel hint="Biggest cost multiplier">Resolution</FieldLabel>
-          <Segmented options={model.resolutions} value={p.resolution} onChange={(resolution) => update({ resolution })} format={(r) => RESOLUTION_LABEL[r]} />
+          <Segmented
+            options={model.resolutions}
+            value={p.resolution}
+            onChange={(resolution) => {
+              const allowed = durationsFor(model, resolution);
+              update({ resolution, duration: allowed.includes(p.duration) ? p.duration : allowed[allowed.length - 1] });
+            }}
+            format={(r) => RESOLUTION_LABEL[r]}
+          />
         </div>
         {isVideo && model.supports.audio && (
           <label className="flex items-center justify-between rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm">
