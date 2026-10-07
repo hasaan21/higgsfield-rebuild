@@ -113,6 +113,7 @@ export interface MediaRef {
 
 export interface Generation {
   id: string;
+  userId: string;
   action: GenerationAction;
   parentId?: string;
   params: StudioParams;
