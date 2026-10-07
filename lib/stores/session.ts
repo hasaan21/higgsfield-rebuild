@@ -100,6 +100,9 @@ export function selectUser(s: SessionState): User | null {
   };
 }
 
+const NO_LEDGER: CreditLedgerEntry[] = [];
+
+/** Must return a stable reference: it's used as a plain zustand selector. */
 export function selectLedger(s: SessionState): CreditLedgerEntry[] {
-  return s.identity ? (s.profiles[s.identity.id]?.ledger ?? []) : [];
+  return (s.identity && s.profiles[s.identity.id]?.ledger) || NO_LEDGER;
 }
