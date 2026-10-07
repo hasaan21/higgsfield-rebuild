@@ -5,7 +5,11 @@ A study rebuild of [Higgsfield AI](https://higgsfield.ai/)'s creation flow: Cine
 It runs in one of two modes:
 
 - **Demo mode** (default): generation is mocked in the browser with bundled clips, and credits and checkout are simulated. The whole app is a static site.
-- **Live mode**: a Cloudflare Worker sends jobs to each vendor's own API (Kling, Google, BytePlus, Alibaba), stores results in R2, keeps credits in Supabase Postgres and takes payments through Stripe. A model whose vendor key isn't set still goes through the server and is billed, but returns a sample clip and is labelled "Demo output" in the model picker.
+- **Live mode**: a Cloudflare Worker runs every job, keeps credits and history in Supabase Postgres, and stores media in R2. Real vendor models (Kling, Google, BytePlus, Alibaba) and Stripe payments are optional add-ons. Without them, jobs still go through the server and are billed in credits, but return a sample clip labelled "Demo output".
+
+Live mode runs on free tiers: a free Supabase project, plus Workers, R2 and Workflows on Cloudflare. Vendor API keys, Stripe and OAuth providers cost money or need extra accounts, so a clone doesn't need them (see [What's optional](#whats-optional)).
+
+**Reference deployment:** https://higgsfield-rebuild.matecorporation.workers.dev. It runs in live mode with email/password auth, server credits and mock output, without vendor keys, Stripe or OAuth.
 
 - **Audit of the real product:** [`docs/AUDIT.md`](docs/AUDIT.md)
 - **Spec for this rebuild:** [`PRODUCT_SPEC.md`](PRODUCT_SPEC.md)
@@ -32,43 +36,91 @@ NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 ```
 
-In Supabase, enable Email plus the Google, Apple and Azure providers you want. Add `<your-origin>/login/` to the redirect URLs. Without the Worker backend, credits and generations stay in the browser.
+The default **Email** provider is enough: Supabase's built-in mailer is free, though rate-limited. For quick testing, turn off **Confirm email** under Authentication → Sign In / Providers. Add `<your-origin>/login/` to the redirect URLs. Without the Worker backend, credits and generations stay in the browser.
 
-## Live mode: real models, server credits, Stripe
+## Live mode (free setup)
 
-The client switches to live mode when Supabase is configured **and** `GET /api/config` reports `backend: true`. That happens once the Worker has `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+The client switches to live mode when Supabase is configured **and** `GET /api/config` reports `backend: true`. That happens once the Worker has `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. Everything in this section is free.
 
-### 1. Database
+### 1. Supabase
 
-Run [`supabase/migrations/0001_billing.sql`](supabase/migrations/0001_billing.sql) in the Supabase SQL editor (or `supabase db push`). It creates `profiles`, `credit_ledger`, `generations` and `stripe_events`. Users can only read their own rows. Every write goes through `security definer` functions that only the service role can call, so balances can't be edited from the browser. A profile with 3 free generations is created on sign-up.
+1. Create a project (the free tier is fine).
+2. Run [`supabase/migrations/0001_billing.sql`](supabase/migrations/0001_billing.sql) in the SQL editor, or use `supabase db push`. It creates `profiles`, `credit_ledger`, `generations` and `stripe_events`. Users can only read their own rows. Every write goes through `security definer` functions that only the service role can call, so balances can't be edited from the browser. New sign-ups get a profile with 3 free generations.
+3. Under Authentication → URL Configuration:
+   - Set the **Site URL** to your Worker URL.
+   - Add `<worker-url>/login/` and `http://localhost:3000/login/` to the redirect URLs.
+4. Put the project URL and publishable (anon) key in `.env.local`, as in [Real auth with Supabase](#real-auth-with-supabase). They're public and get inlined at build time.
 
-### 2. Cloudflare resources
+### 2. Cloudflare
 
 ```bash
+npx wrangler login
 npx wrangler r2 bucket create higgsfield-media
 ```
 
-Set `SUPABASE_URL` under `vars` in `wrangler.jsonc`. The Workflow (`higgsfield-generate`) is created on first deploy.
+In `wrangler.jsonc`, set `account_id` to your account and `SUPABASE_URL` (under `vars`) to your project URL. The Workflow (`higgsfield-generate`) is created on first deploy.
 
-### 3. Secrets
+### 3. Required secrets
 
-Every secret is listed in [`.dev.vars.example`](.dev.vars.example). In production, set each one with `npx wrangler secret put NAME`.
+```bash
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY   # Supabase → Project Settings → API Keys → service_role
+npx wrangler secret put MEDIA_SIGNING_SECRET        # any long random string, e.g. `openssl rand -base64 48`
+pnpm run deploy
+```
 
-| Secret | Needed for |
+Check it with `curl <worker-url>/api/config`. You should see `"backend":true`, an empty `liveModelIds` and `"stripe":false`.
+
+`SUPABASE_JWT_SECRET` is only for older projects on the legacy shared JWT secret. Current projects sign user tokens with asymmetric keys, and the Worker verifies them against the project's JWKS.
+
+### 4. Local development against the Worker
+
+```bash
+cp .dev.vars.example .dev.vars        # fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, MEDIA_SIGNING_SECRET
+echo 'NEXT_PUBLIC_API_BASE=http://localhost:8787' > .env.development.local
+pnpm dev:worker                       # Worker + Workflows + local R2 on http://localhost:8787
+pnpm dev                              # http://localhost:3000
+```
+
+Keep `NEXT_PUBLIC_API_BASE` out of `.env.local`. That file is also read by `next build`, and production must call its own origin. To run everything on one origin, use `pnpm preview` instead.
+
+### Credits without Stripe
+
+Each new account gets 3 free generations on starter models. Without Stripe, plan and pack buttons show "Payments aren't set up on this server yet", and balances can only change on the server. To give a test account credits or a plan, run this in the Supabase SQL editor:
+
+```sql
+-- Add 1,000 credits (shows in the user's ledger)
+select public.grant_credits(
+  (select id from auth.users where email = 'you@example.com'),
+  1000, 'top-up', 'Manual grant', 'manual:' || gen_random_uuid()
+);
+
+-- Switch plan (unlocks models, concurrency and unlimited lanes)
+update public.profiles set plan_id = 'ultra'
+where id = (select id from auth.users where email = 'you@example.com');
+```
+
+## What's optional
+
+None of these are needed for a working clone. Each has a fallback, and the app works without it.
+
+| Integration | Without it | To enable |
+| --- | --- | --- |
+| **OAuth sign-in** (Google, Apple, Microsoft) | Email and password only. The OAuth buttons return an error from Supabase because the provider is off. | Enable the provider in Supabase → Authentication → Providers with your OAuth app's client id and secret |
+| **Model API keys** | Every model runs on the mock adapter: billed in credits, with a sample clip as output and a "Demo output" label | `wrangler secret put` any of the keys below; each one makes its models live at once, with no redeploy |
+| **Stripe** | No paid plans or packs; grant credits with the SQL above | The secrets below, plus a webhook (see [Stripe](#stripe)) |
+
+| Secret | Unlocks |
 | --- | --- |
-| `SUPABASE_SERVICE_ROLE_KEY` | Turns the backend on |
-| `SUPABASE_JWT_SECRET` | Only for projects on the legacy shared JWT secret; otherwise tokens are verified against the project's JWKS |
-| `MEDIA_SIGNING_SECRET` | Signs media links (any long random string) |
 | `KLING_API_KEY` | Kling 3.0, Kling 2.6 |
 | `GEMINI_API_KEY` | Veo 3.1, Nano Banana 2.1 |
 | `ARK_API_KEY` | Seedance 2.0, Seedance 2.5 (BytePlus ModelArk) |
 | `DASHSCOPE_API_KEY`, `DASHSCOPE_WORKSPACE_ID` | Wan 2.7 (Alibaba Model Studio; region via the `DASHSCOPE_REGION` var) |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Checkout, portal and webhook |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Checkout, customer portal and webhook |
 | `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PLUS`, `STRIPE_PRICE_ULTRA` | Monthly recurring prices for each plan |
 
-Kling o1, Cinema Studio, Soul 2.0 and Soul Cinema have no public vendor API, so they always return demo output. Upscale, extend, reframe and lip sync are also mocked. Sora 2 is retired, because OpenAI shut down its API.
+Kling o1, Cinema Studio, Soul 2.0 and Soul Cinema have no public vendor API, so they always return demo output. Upscale, extend, reframe and lip sync are also mocked. Sora 2 is retired, because OpenAI shut down its API. To test Wan with first or last frames locally, use a tunnel, because DashScope fetches frames from a public URL.
 
-### 4. Stripe
+### Stripe
 
 Create a monthly price for Basic, Plus and Ultra, and put the price ids in the secrets above. Credit packs use inline prices, so they need no setup. Add a webhook endpoint at `https://<your-domain>/api/stripe/webhook` with these events:
 
@@ -77,19 +129,7 @@ Create a monthly price for Basic, Plus and Ultra, and put the price ids in the s
 - `customer.subscription.updated`
 - `customer.subscription.deleted`
 
-Turn on the customer portal in the Stripe dashboard so users can switch plans or cancel.
-
-### 5. Local development against the Worker
-
-```bash
-cp .dev.vars.example .dev.vars        # fill in SUPABASE_URL, the service role key and any vendor keys
-pnpm dev:worker                       # Worker + Workflows on http://localhost:8787
-# in .env.local: NEXT_PUBLIC_API_BASE=http://localhost:8787
-pnpm dev                              # http://localhost:3000
-stripe listen --forward-to localhost:8787/api/stripe/webhook   # optional; copy its signing secret into .dev.vars
-```
-
-`wrangler dev` runs Workflows and R2 locally. To test Wan with first or last frames, use a tunnel or deploy, because DashScope fetches frames from a public URL. To run everything on one origin instead, use `pnpm preview`.
+Turn on the customer portal in the Stripe dashboard so users can switch plans or cancel. Locally, run `stripe listen --forward-to localhost:8787/api/stripe/webhook` and copy its signing secret into `.dev.vars`.
 
 ### Pricing guardrail
 

@@ -1,20 +1,24 @@
 # Copy to .dev.vars for `wrangler dev`; in production set each with `wrangler secret put NAME`.
-# Any vendor key left empty makes that vendor's models run on the mock engine (still billed in credits).
 
+# --- Required for live mode (all free) ---
 # Overrides the `SUPABASE_URL` var in wrangler.jsonc for local runs. The backend stays off until this and the service role key are set.
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
-# Only for projects still on the legacy shared JWT secret; otherwise tokens are checked against the project's JWKS.
-SUPABASE_JWT_SECRET=
 # Any long random string; signs short-lived media links.
 MEDIA_SIGNING_SECRET=
+# Only for projects still on the legacy shared JWT secret; otherwise tokens are checked against the project's JWKS.
+SUPABASE_JWT_SECRET=
 
+# --- Optional, paid: vendor model keys ---
+# Any key left empty makes that vendor's models run on the mock engine (still billed in credits, labelled "Demo output").
 KLING_API_KEY=
 GEMINI_API_KEY=
 ARK_API_KEY=
 DASHSCOPE_API_KEY=
 DASHSCOPE_WORKSPACE_ID=
 
+# --- Optional: Stripe payments ---
+# Without these, plans and packs can't be bought; grant credits with SQL (see README "Credits without Stripe").
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_PRICE_BASIC=
