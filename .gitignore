@@ -43,3 +43,5 @@ next-env.d.ts
 .cursor/hooks/.state/
 .DS_Store
 node_modules/
+.dev.vars
+.wrangler/

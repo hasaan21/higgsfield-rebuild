@@ -1,9 +1,27 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "higgsfield-rebuild",
-  "compatibility_date": "2026-10-01",
+  "account_id": "80148e3e7beaf5c77043e35763d00371",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-07",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./out",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "higgsfield-media" }],
+  "workflows": [{ "name": "higgsfield-generate", "binding": "GENERATE", "class_name": "GenerateWorkflow" }],
+  // Leave SUPABASE_URL empty to keep /api off; the site then runs as the client-only demo.
+  // Secrets (wrangler secret put / .dev.vars): see .dev.vars.example.
+  "vars": {
+    "SUPABASE_URL": "https://eaamwbadnjbiyowerwxb.supabase.co",
+    "DASHSCOPE_REGION": "ap-southeast-1"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "traces": { "enabled": true }
   }
 }
