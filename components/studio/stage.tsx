@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Clapperboard } from "lucide-react";
 import { GenerationCard } from "@/components/generation-card";
 import { GenerationActions } from "@/components/library/generation-actions";
@@ -11,6 +12,7 @@ import { useQueue } from "@/lib/stores/queue";
 import { useStudio } from "@/lib/stores/studio";
 
 export function Stage() {
+  const router = useRouter();
   const user = useUser();
   const all = useQueue((s) => s.generations);
   const mode = useStudio((s) => s.params.mode);
@@ -44,7 +46,7 @@ export function Stage() {
   return (
     <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 2xl:grid-cols-3">
       {shown.map((g) => (
-        <GenerationCard key={g.id} gen={g} position={positions.get(g.id)} actions={<GenerationActions gen={g} />} />
+        <GenerationCard key={g.id} gen={g} position={positions.get(g.id)} onOpen={() => router.push(`/library/?item=${g.id}`)} actions={<GenerationActions gen={g} />} />
       ))}
     </div>
   );
