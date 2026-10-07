@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Coins, LogOut, Sparkles, User as UserIcon } from "lucide-react";
+import { Coins, CreditCard, LogOut, Sparkles, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { getAuthProvider } from "@/lib/auth/provider";
+import { manageBilling } from "@/lib/billing";
 import { PLAN_BY_ID } from "@/lib/catalog/plans";
 import { useHydrated, useUser } from "@/lib/hooks";
 import { timeAgo } from "@/lib/id";
@@ -63,6 +64,7 @@ function AccountArea() {
   const status = useSession((s) => s.status);
   const user = useUser();
   const ledger = useSession(selectLedger);
+  const subscribed = useSession((s) => s.live && (s.server?.subscribed ?? false));
   const router = useRouter();
 
   if (!hydrated || status === "loading") return <div className="h-8 w-40 animate-pulse rounded-md bg-secondary" />;
@@ -152,6 +154,11 @@ function AccountArea() {
               <Sparkles className="size-4" /> Plan: {plan.name}
             </Link>
           </DropdownMenuItem>
+          {subscribed && (
+            <DropdownMenuItem onClick={manageBilling}>
+              <CreditCard className="size-4" /> Manage billing
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={signOut}>
             <LogOut className="size-4" /> Sign out

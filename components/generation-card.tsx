@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Heart, Loader2, RotateCcw, Shuffle } from "lucide-react";
 import { getModel } from "@/lib/catalog/models";
-import { startGeneration } from "@/lib/generate";
+import { startGeneration, toggleFavorite } from "@/lib/generate";
 import { timeAgo } from "@/lib/id";
 import { ACTION_LABEL } from "@/lib/pricing";
 import { useQueue } from "@/lib/stores/queue";
@@ -29,7 +29,6 @@ interface Props {
 
 export function GenerationCard({ gen, position, actions, onOpen, className }: Props) {
   const video = useRef<HTMLVideoElement>(null);
-  const toggleFavorite = useQueue((s) => s.toggleFavorite);
   const model = getModel(gen.params.modelId);
   const title = gen.action === "generate" ? model.name : `${ACTION_LABEL[gen.action]} · ${model.name}`;
 
@@ -56,7 +55,7 @@ export function GenerationCard({ gen, position, actions, onOpen, className }: Pr
         {gen.status === "completed" && gen.output ? (
           <button className="block size-full" onClick={onOpen} aria-label="Open">
             {gen.output.kind === "video" ? (
-              <video ref={video} src={gen.output.src} poster={gen.output.poster} muted loop playsInline preload="none" className="size-full object-cover" />
+              <video ref={video} src={gen.output.src} poster={gen.output.poster || undefined} muted loop playsInline preload={gen.output.poster ? "none" : "metadata"} className="size-full object-cover" />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={gen.output.src} alt={gen.params.prompt} className="size-full object-cover" />

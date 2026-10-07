@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import { getModel } from "@/lib/catalog/models";
 import { PLAN_BY_ID } from "@/lib/catalog/plans";
+import { cancelLive, deleteLive, favoriteLive, submitLive } from "@/lib/live";
 import { ACTION_LABEL, formatCredits, quote } from "@/lib/pricing";
 import { usePaywall } from "@/lib/stores/paywall";
 import { useQueue } from "@/lib/stores/queue";
@@ -29,6 +30,9 @@ export function startGeneration(params: StudioParams, opts: Options = {}): Gener
   }
   if (!user) return null;
 
+  const label = action === "generate" ? getModel(params.modelId).name : ACTION_LABEL[action];
+  const live = useSession.getState().live;
+
   const gen = useQueue.getState().submit({
     userId: user.id,
     params,
@@ -41,7 +45,16 @@ export function startGeneration(params: StudioParams, opts: Options = {}): Gener
     remixOf: opts.remixOf,
   });
 
-  const label = action === "generate" ? getModel(params.modelId).name : ACTION_LABEL[action];
+  if (live) {
+    void submitLive(gen, action, params, opts.parent?.id, opts.remixOf).then((saved) => {
+      if (!saved) return;
+      toast(`${label} queued`, {
+        description: saved.unlimited ? "Unlimited — no credits charged" : saved.freeTier ? "Using a free generation" : `${formatCredits(saved.cost)} credits charged`,
+      });
+    });
+    return gen;
+  }
+
   if (q.freeTier) session.consumeFreeGeneration();
   else if (q.cost > 0) session.debit(q.cost, `${label}${action === "generate" ? ` · ${params.duration ? `${params.duration}s ` : ""}${params.resolution}` : ""}`, gen.id);
 
@@ -53,14 +66,25 @@ export function startGeneration(params: StudioParams, opts: Options = {}): Gener
 
 /** Refund a job that never produced output. Higgsfield doesn't refund; we do for failures and queued cancels. */
 export function refundGeneration(gen: Generation, reason: string) {
-  if (gen.refunded) return;
+  if (gen.refunded || useSession.getState().live) return;
   const session = useSession.getState();
   if (gen.freeTier) session.restoreFreeGeneration();
   else if (gen.cost > 0) session.refund(gen.cost, reason, gen.id);
   useQueue.getState().markRefunded(gen.id);
 }
 
+export function toggleFavorite(id: string) {
+  if (useSession.getState().live) return void favoriteLive(id);
+  useQueue.getState().toggleFavorite(id);
+}
+
+export function deleteGeneration(id: string) {
+  if (useSession.getState().live) return void deleteLive(id);
+  useQueue.getState().remove(id);
+}
+
 export function cancelGeneration(id: string) {
+  if (useSession.getState().live) return void cancelLive(id);
   const prev = useQueue.getState().cancel(id);
   if (!prev) return;
   if (prev.status === "queued") {

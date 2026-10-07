@@ -34,6 +34,9 @@ interface StudioState {
   clearRemix: () => void;
   reset: () => void;
   reseed: () => void;
+  /** Once per browser: move users still on the stock defaults to models that render for real. */
+  adoptLiveDefaults: (liveModelIds: readonly string[]) => void;
+  adoptedLiveDefaults: boolean;
 }
 
 export const useStudio = create<StudioState>()(
@@ -85,11 +88,22 @@ export const useStudio = create<StudioState>()(
       clearRemix: () => set({ remix: null }),
       reset: () => set({ params: defaultParams(), remix: null }),
       reseed: () => set((s) => ({ params: { ...s.params, seed: Math.floor(Math.random() * 1_000_000) } })),
+      adoptedLiveDefaults: false,
+      adoptLiveDefaults: (liveModelIds) => {
+        const { params, lastModelByMode, adoptedLiveDefaults } = get();
+        if (adoptedLiveDefaults || !liveModelIds.length) return;
+        const next = { ...lastModelByMode };
+        for (const mode of ["video", "image"] as const) {
+          if (next[mode] === defaultModelFor(mode).id) next[mode] = defaultModelFor(mode, liveModelIds).id;
+        }
+        const current = params.modelId === defaultModelFor(params.mode).id ? switchModel(params, next[params.mode]) : params;
+        set({ params: current, lastModelByMode: next, adoptedLiveDefaults: true });
+      },
     }),
     {
       name: "hf.studio",
       version: 1,
-      partialize: (s) => ({ params: s.params, lastModelByMode: s.lastModelByMode, remix: s.remix }),
+      partialize: (s) => ({ params: s.params, lastModelByMode: s.lastModelByMode, remix: s.remix, adoptedLiveDefaults: s.adoptedLiveDefaults }),
       merge: (persisted, current) => {
         const p = persisted as Partial<StudioState> | undefined;
         if (!p?.params) return current;

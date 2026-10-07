@@ -32,6 +32,10 @@ export function createSupabaseProvider(url: string, key: string): AuthProvider {
       const { data } = await supabase.auth.getSession();
       return toIdentity(data.session?.user);
     },
+    async getAccessToken() {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token ?? null;
+    },
     async signInWithOAuth(provider, redirectTo) {
       const { error } = await supabase.auth.signInWithOAuth({ provider: OAUTH_NAME[provider], options: { redirectTo } });
       if (error) throw error;

@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { Check, ChevronsUpDown, Infinity as InfinityIcon, Lock } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MODELS } from "@/lib/catalog/models";
+import { useBackend } from "@/lib/api";
+import { durationsFor, getModel, MODELS } from "@/lib/catalog/models";
 import { PLAN_BY_ID } from "@/lib/catalog/plans";
 import { useUser } from "@/lib/hooks";
 import { baseCost, canUseModel, formatCredits } from "@/lib/pricing";
 import { useStudio } from "@/lib/stores/studio";
+import type { ModelSpec } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function ModelPicker() {
@@ -15,8 +17,15 @@ export function ModelPicker() {
   const setModel = useStudio((s) => s.setModel);
   const user = useUser();
   const [open, setOpen] = useState(false);
-  const current = MODELS.find((m) => m.id === params.modelId)!;
+  const live = useBackend((s) => s.mode === "live");
+  const liveIds = useBackend((s) => s.liveModelIds);
+  const current = getModel(params.modelId);
   const models = MODELS.filter((m) => m.mode === params.mode);
+  const estimate = (m: ModelSpec) => {
+    const resolution = m.resolutions.includes(params.resolution) ? params.resolution : m.resolutions[0];
+    const durations = durationsFor(m, resolution);
+    return baseCost(m, { ...params, resolution, duration: durations.includes(params.duration) ? params.duration : durations[0] }).total;
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -31,7 +40,8 @@ export function ModelPicker() {
         {models.map((m) => {
           const locked = user ? !canUseModel(m, user.planId) : false;
           const unlimited = user ? m.unlimitedOn.includes(user.planId) : false;
-          const est = baseCost(m, { ...params, duration: m.durations.includes(params.duration) ? params.duration : m.durations[0], resolution: m.resolutions.includes(params.resolution) ? params.resolution : m.resolutions[0] }).total;
+          const est = estimate(m);
+          const demo = live && !liveIds.includes(m.id);
           return (
             <button
               key={m.id}
@@ -45,6 +55,14 @@ export function ModelPicker() {
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-medium">{m.name}</span>
                   {m.badge && <span className="rounded bg-primary/15 px-1 text-[9px] font-bold tracking-wider text-primary uppercase">{m.badge}</span>}
+                  {demo && (
+                    <span
+                      className="rounded bg-secondary px-1 text-[9px] font-semibold tracking-wider text-muted-foreground uppercase"
+                      title="Not connected to the vendor yet: returns a sample clip, but credits are still charged"
+                    >
+                      Demo output
+                    </span>
+                  )}
                   {locked && <Lock className="size-3 text-muted-foreground" />}
                 </div>
                 <p className="line-clamp-1 text-xs text-muted-foreground">{m.tagline}</p>

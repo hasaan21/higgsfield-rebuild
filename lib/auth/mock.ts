@@ -42,6 +42,9 @@ export function createMockProvider(): AuthProvider {
     async getSession() {
       return read<AuthIdentity | null>(SESSION_KEY, null);
     },
+    async getAccessToken() {
+      return null;
+    },
     async signInWithOAuth(provider) {
       await wait(700);
       const demo = OAUTH_DEMO[provider];

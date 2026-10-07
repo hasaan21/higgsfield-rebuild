@@ -50,7 +50,7 @@ function Body({ gen, all, onSelect }: { gen: Generation; all: Generation[]; onSe
     <div className="grid max-h-[90dvh] md:grid-cols-[1fr_20rem]">
       <div className="grid min-h-0 place-items-center bg-black">
         {gen.output?.kind === "video" ? (
-          <video key={gen.id} src={gen.output.src} poster={gen.output.poster} autoPlay muted loop playsInline controls className="max-h-[90dvh] w-full object-contain" />
+          <video key={gen.id} src={gen.output.src} poster={gen.output.poster || undefined} autoPlay muted loop playsInline controls className="max-h-[90dvh] w-full object-contain" />
         ) : gen.output ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={gen.output.src} alt={p.prompt} className="max-h-[90dvh] w-full object-contain" />

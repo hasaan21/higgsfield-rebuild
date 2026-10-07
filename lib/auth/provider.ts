@@ -12,6 +12,8 @@ export interface AuthProvider {
   kind: "supabase" | "mock";
   oauthProviders: AuthProviderId[];
   getSession(): Promise<AuthIdentity | null>;
+  /** Bearer token for the Worker API; the mock has none. */
+  getAccessToken(): Promise<string | null>;
   /** Supabase redirects away and resolves never; the mock resolves with the identity. */
   signInWithOAuth(provider: Exclude<AuthProviderId, "email">, redirectTo: string): Promise<AuthIdentity | null>;
   signInWithPassword(email: string, password: string): Promise<AuthIdentity>;

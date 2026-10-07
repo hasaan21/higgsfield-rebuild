@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Coins, Infinity as InfinityIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { MODELS } from "@/lib/catalog/models";
+import { awaitCheckoutResult, buyPack, buyPlan, manageBilling } from "@/lib/billing";
+import { durationsFor, MODELS } from "@/lib/catalog/models";
 import { CREDIT_PACKS, PLAN_RANK, PLANS } from "@/lib/catalog/plans";
 import { useHydrated, useUser } from "@/lib/hooks";
 import { baseCost, formatCredits } from "@/lib/pricing";
@@ -20,20 +22,35 @@ const FAQ = [
   ["What does a generation cost?", "Base price for the model, scaled by duration and resolution. The Generate button shows the exact number and a breakdown before you click — no surprises."],
   ["Do failed generations cost credits?", "No. If a job fails, or you cancel it before it starts, the credits go straight back to your balance. You'll see it in the ledger."],
   ["What does “unlimited” mean?", "On Plus and Ultra, the listed models cost 0 credits. They run in a separate lane, one at a time per mode, so they never block your paid slots."],
-  ["Is this real checkout?", "No — this is a demo rebuild. Choosing a plan or pack updates your balance instantly with no payment."],
 ];
+
+const CHECKOUT_FAQ = {
+  live: ["How do payments work?", "Checkout is handled by Stripe. Plans renew monthly and add their credits on each renewal; change or cancel any time from Manage billing."],
+  demo: ["Is this real checkout?", "No — this is a demo rebuild. Choosing a plan or pack updates your balance instantly with no payment."],
+};
 
 export default function PricingPage() {
   const user = useUser();
   const hydrated = useHydrated();
   const router = useRouter();
-  const setPlan = useSession((s) => s.setPlan);
-  const topUp = useSession((s) => s.topUp);
+  const live = useSession((s) => s.live);
+  const subscribed = useSession((s) => s.server?.subscribed ?? false);
+  const profileLoaded = useSession((s) => s.server !== null);
+
+  useEffect(() => {
+    if (!live || !profileLoaded) return;
+    const url = new URL(location.href);
+    const result = url.searchParams.get("checkout");
+    if (!result) return;
+    url.searchParams.delete("checkout");
+    history.replaceState(null, "", url.pathname + url.search);
+    if (result === "success") void awaitCheckoutResult();
+    else toast("Checkout cancelled", { description: "No payment was taken." });
+  }, [live, profileLoaded]);
+
   const choose = (id: PlanId) => {
     if (!user) return router.push(`/login/?mode=signup&next=/pricing/`);
-    setPlan(id);
-    const plan = PLANS.find((p) => p.id === id)!;
-    toast(`You're on ${plan.name}`, { description: plan.credits ? `${plan.credits.toLocaleString()} credits added (demo checkout)` : undefined });
+    buyPlan(id);
   };
 
   return (
@@ -64,9 +81,15 @@ export default function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <Button className="mt-6 w-full" variant={popular ? "default" : "secondary"} disabled={current || downgrade || (p.id === "free" && !!user)} onClick={() => choose(p.id)}>
-                {current ? "Current plan" : p.id === "free" ? (user ? "Included" : "Start free") : downgrade ? "Contact support" : `Get ${p.name}`}
-              </Button>
+              {live && subscribed && p.id !== "free" && !current ? (
+                <Button className="mt-6 w-full" variant="secondary" onClick={manageBilling}>
+                  {downgrade ? "Downgrade in billing" : `Switch to ${p.name}`}
+                </Button>
+              ) : (
+                <Button className="mt-6 w-full" variant={popular ? "default" : "secondary"} disabled={current || downgrade || (p.id === "free" && !!user)} onClick={() => choose(p.id)}>
+                  {current ? "Current plan" : p.id === "free" ? (user ? "Included" : "Start free") : downgrade ? "Contact support" : `Get ${p.name}`}
+                </Button>
+              )}
             </div>
           );
         })}
@@ -82,8 +105,7 @@ export default function PricingPage() {
                 key={pk.id}
                 onClick={() => {
                   if (!user) return router.push(`/login/?next=/pricing/`);
-                  topUp(pk.credits, `Credit pack ${formatCredits(pk.credits)} (demo checkout)`);
-                  toast(`+${pk.credits.toLocaleString()} credits`, { description: "Demo checkout" });
+                  buyPack(pk.id);
                 }}
                 className="rounded-xl border border-border bg-card p-4 text-left hover:border-primary/60"
               >
@@ -102,11 +124,12 @@ export default function PricingPage() {
           <div className="mt-4 overflow-hidden rounded-xl border border-border">
             {MODELS.map((m, i) => {
               const res = m.resolutions[0];
-              const cost = baseCost(m, { ...SAMPLE, duration: m.durations[0], resolution: res }).total;
+              const duration = durationsFor(m, res)[0];
+              const cost = baseCost(m, { ...SAMPLE, duration, resolution: res }).total;
               return (
                 <div key={m.id} className={cn("flex items-center justify-between px-4 py-2 text-sm", i % 2 && "bg-secondary/30")}>
                   <span>
-                    {m.name} <span className="text-xs text-muted-foreground">· {m.mode === "video" ? `${m.durations[0]}s ` : ""}{res}</span>
+                    {m.name} <span className="text-xs text-muted-foreground">· {m.mode === "video" ? `${duration}s ` : ""}{res}</span>
                   </span>
                   <span className="flex items-center gap-2 tabular-nums">
                     {m.unlimitedOn.length > 0 && (
@@ -126,7 +149,7 @@ export default function PricingPage() {
       <section className="mx-auto mt-16 max-w-3xl">
         <h2 className="text-lg font-semibold">Questions</h2>
         <div className="mt-4 divide-y divide-border rounded-xl border border-border">
-          {FAQ.map(([q, a]) => (
+          {[...FAQ, CHECKOUT_FAQ[live ? "live" : "demo"]].map(([q, a]) => (
             <details key={q} className="group px-4 py-3">
               <summary className="cursor-pointer list-none text-sm font-medium">{q}</summary>
               <p className="mt-2 text-sm text-muted-foreground">{a}</p>

@@ -5,16 +5,13 @@ import { useRouter } from "next/navigation";
 import { Coins, Lock, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { buyPack, buyPlan } from "@/lib/billing";
 import { CREDIT_PACKS, PLAN_BY_ID } from "@/lib/catalog/plans";
 import { formatCredits } from "@/lib/pricing";
 import { usePaywall } from "@/lib/stores/paywall";
-import { useSession } from "@/lib/stores/session";
-import { toast } from "sonner";
 
 export function PaywallDialog() {
   const { reason, close } = usePaywall();
-  const topUp = useSession((s) => s.topUp);
-  const setPlan = useSession((s) => s.setPlan);
   const router = useRouter();
   if (!reason) return null;
 
@@ -56,9 +53,7 @@ export function PaywallDialog() {
             <div className="grid gap-2">
               <Button
                 onClick={() => {
-                  const plan = PLAN_BY_ID[reason.requiredPlan];
-                  setPlan(plan.id);
-                  toast.success(`You're on ${plan.name}`, { description: `${formatCredits(plan.credits)} credits added. Demo checkout — no payment taken.` });
+                  buyPlan(reason.requiredPlan);
                   close();
                 }}
               >
@@ -87,8 +82,7 @@ export function PaywallDialog() {
                   key={p.id}
                   className="rounded-lg border border-border bg-secondary/40 p-3 text-left transition-colors hover:border-primary/60"
                   onClick={() => {
-                    topUp(p.credits, `Credit pack ${formatCredits(p.credits)} (demo checkout)`);
-                    toast.success(`${formatCredits(p.credits)} credits added`, { description: "Demo checkout — no payment taken." });
+                    buyPack(p.id);
                     close();
                   }}
                 >

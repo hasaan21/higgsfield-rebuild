@@ -15,9 +15,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getModel } from "@/lib/catalog/models";
-import { cancelGeneration, startGeneration } from "@/lib/generate";
+import { cancelGeneration, deleteGeneration, startGeneration } from "@/lib/generate";
 import { actionCost, formatCredits } from "@/lib/pricing";
-import { isActive, useQueue } from "@/lib/stores/queue";
+import { isActive } from "@/lib/stores/queue";
 import { useStudio } from "@/lib/stores/studio";
 import type { AspectRatio, Generation, GenerationAction, StudioParams } from "@/lib/types";
 
@@ -34,7 +34,7 @@ function download(href: string, name: string) {
 
 export function downloadWithProvenance(gen: Generation) {
   if (!gen.output) return;
-  const ext = gen.output.src.split(".").pop();
+  const ext = (gen.output.key ?? new URL(gen.output.src, location.href).pathname).split(".").pop();
   const base = `higgsfield-${gen.id}`;
   download(gen.output.src, `${base}.${ext}`);
   const provenance = {
@@ -48,7 +48,7 @@ export function downloadWithProvenance(gen: Generation) {
     cost: gen.cost,
     unlimited: gen.unlimited,
     watermark: gen.watermark,
-    note: "Mock output from the Higgsfield rebuild demo engine.",
+    note: gen.provider && gen.provider !== "mock" ? `Rendered by ${getModel(gen.params.modelId).name}.` : "Mock output from the Higgsfield rebuild demo engine.",
   };
   const url = URL.createObjectURL(new Blob([JSON.stringify(provenance, null, 2)], { type: "application/json" }));
   download(url, `${base}.provenance.json`);
@@ -58,7 +58,6 @@ export function downloadWithProvenance(gen: Generation) {
 
 export function GenerationActions({ gen, align = "end" }: { gen: Generation; align?: "start" | "end" }) {
   const router = useRouter();
-  const remove = useQueue((s) => s.remove);
   const isVideo = gen.params.mode === "video";
   const done = gen.status === "completed";
   const model = getModel(gen.params.modelId);
@@ -125,7 +124,7 @@ export function GenerationActions({ gen, align = "end" }: { gen: Generation; ali
             <X /> Cancel
           </DropdownMenuItem>
         ) : (
-          <DropdownMenuItem variant="destructive" onClick={() => remove(gen.id)}>
+          <DropdownMenuItem variant="destructive" onClick={() => deleteGeneration(gen.id)}>
             <Trash2 /> Delete
           </DropdownMenuItem>
         )}

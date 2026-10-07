@@ -15,14 +15,23 @@ interface Profile {
   ledger: CreditLedgerEntry[];
 }
 
+export interface ServerProfile extends Profile {
+  subscribed: boolean;
+}
+
 type AuthStatus = "loading" | "authenticated" | "anonymous";
 
 interface SessionState {
   status: AuthStatus;
   identity: AuthIdentity | null;
-  /** Per-user billing state, keyed by identity id. Kept in the browser: Supabase only handles auth. */
+  /** Demo mode: per-user billing state kept in the browser, keyed by identity id. */
   profiles: Record<string, Profile>;
+  /** Live mode: the Worker owns credits and plans; this is the last profile it returned. */
+  live: boolean;
+  server: ServerProfile | null;
   setIdentity: (identity: AuthIdentity | null) => void;
+  setLive: (live: boolean) => void;
+  setServerProfile: (profile: ServerProfile | null) => void;
   debit: (amount: number, note: string, generationId?: string) => void;
   refund: (amount: number, note: string, generationId?: string) => void;
   consumeFreeGeneration: () => void;
@@ -38,6 +47,9 @@ const newProfile = (): Profile => ({
   createdAt: new Date().toISOString(),
   ledger: [],
 });
+
+/** Shown in live mode until the first `/api/me` returns. */
+const EMPTY_PROFILE: Profile = { planId: "free", credits: 0, freeGenerations: 0, createdAt: new Date(0).toISOString(), ledger: [] };
 
 export const useSession = create<SessionState>()(
   persist(
@@ -57,12 +69,17 @@ export const useSession = create<SessionState>()(
         status: "loading",
         identity: null,
         profiles: {},
+        live: false,
+        server: null,
         setIdentity: (identity) =>
           set((s) => ({
             identity,
             status: identity ? "authenticated" : "anonymous",
             profiles: identity && !s.profiles[identity.id] ? { ...s.profiles, [identity.id]: newProfile() } : s.profiles,
+            server: identity?.id === s.identity?.id ? s.server : null,
           })),
+        setLive: (live) => set({ live }),
+        setServerProfile: (server) => set({ server }),
         debit: (amount, note, generationId) => amount > 0 && mutate((p) => entry(p, -amount, "generation", note, generationId)),
         refund: (amount, note, generationId) => amount > 0 && mutate((p) => entry(p, amount, "refund", note, generationId)),
         consumeFreeGeneration: () => mutate((p) => ({ ...p, freeGenerations: Math.max(0, p.freeGenerations - 1) })),
@@ -86,7 +103,7 @@ export const useSession = create<SessionState>()(
 
 export function selectUser(s: SessionState): User | null {
   if (!s.identity) return null;
-  const p = s.profiles[s.identity.id] ?? newProfile();
+  const p = s.live ? (s.server ?? EMPTY_PROFILE) : (s.profiles[s.identity.id] ?? newProfile());
   return {
     id: s.identity.id,
     email: s.identity.email,
@@ -104,5 +121,6 @@ const NO_LEDGER: CreditLedgerEntry[] = [];
 
 /** Must return a stable reference: it's used as a plain zustand selector. */
 export function selectLedger(s: SessionState): CreditLedgerEntry[] {
+  if (s.live) return s.server?.ledger ?? NO_LEDGER;
   return (s.identity && s.profiles[s.identity.id]?.ledger) || NO_LEDGER;
 }

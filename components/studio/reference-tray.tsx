@@ -1,10 +1,12 @@
 "use client";
 
-import { useRef } from "react";
-import { Film, ImageIcon, ImagePlus, Lock, Move, Shapes, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Film, ImageIcon, ImagePlus, Loader2, Lock, Move, Shapes, X } from "lucide-react";
 import { toast } from "sonner";
 import { getModel } from "@/lib/catalog/models";
+import { uploadReference } from "@/lib/live";
 import { MEDIA } from "@/lib/media";
+import { useSession } from "@/lib/stores/session";
 import { SLOT_LIMITS, useStudio } from "@/lib/stores/studio";
 import type { Reference, ReferenceSlot } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -22,14 +24,34 @@ export function ReferenceTray() {
   const removeReference = useStudio((s) => s.removeReference);
   const model = getModel(params.modelId);
   const inputs = useRef<Partial<Record<ReferenceSlot, HTMLInputElement | null>>>({});
+  const [uploading, setUploading] = useState(0);
 
   const supported = (slot: ReferenceSlot) =>
     slot === "subject" ? model.maxReferences > 0 : slot === "motion" ? model.supports.motionRef : model.supports.firstLast;
   const limit = (slot: ReferenceSlot) => (slot === "subject" ? Math.min(SLOT_LIMITS.subject, model.maxReferences) : SLOT_LIMITS[slot]);
 
-  function onFiles(slot: ReferenceSlot, files: FileList | null) {
+  async function onFiles(slot: ReferenceSlot, files: FileList | null) {
+    const live = useSession.getState().live;
     for (const file of Array.from(files ?? [])) {
-      const res = addReference({ slot, kind: file.type.startsWith("video") ? "video" : "image", name: file.name, url: URL.createObjectURL(file) });
+      const kind = file.type.startsWith("video") ? "video" : "image";
+      if (live && useStudio.getState().params.references.filter((r) => r.slot === slot).length >= limit(slot)) {
+        toast.error(`${SLOTS.find((s) => s.slot === slot)?.title} is full`);
+        break;
+      }
+      let ref: Omit<Reference, "id"> = { slot, kind, name: file.name, url: URL.createObjectURL(file) };
+      if (live) {
+        setUploading((n) => n + 1);
+        try {
+          const { key, url } = await uploadReference(file);
+          ref = { ...ref, url, key };
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Upload failed");
+          break;
+        } finally {
+          setUploading((n) => n - 1);
+        }
+      }
+      const res = addReference(ref);
       if (!res.ok) {
         toast.error(res.reason);
         break;
@@ -92,7 +114,7 @@ export function ReferenceTray() {
                       className="grid size-12 place-items-center rounded-md border border-dashed border-border text-muted-foreground hover:border-primary/60 hover:text-primary"
                       aria-label={`Upload ${title}`}
                     >
-                      <ImagePlus className="size-4" />
+                      {uploading ? <Loader2 className="size-4 animate-spin" /> : <ImagePlus className="size-4" />}
                     </button>
                     <button onClick={() => addSample(slot)} className="h-12 rounded-md px-2 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground">
                       + sample
@@ -108,7 +130,7 @@ export function ReferenceTray() {
                   multiple={slot === "subject"}
                   className="hidden"
                   onChange={(e) => {
-                    onFiles(slot, e.target.files);
+                    void onFiles(slot, e.target.files);
                     e.target.value = "";
                   }}
                 />
