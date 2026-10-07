@@ -59,7 +59,7 @@ function Body({ gen, all, onSelect }: { gen: Generation; all: Generation[]; onSe
         )}
       </div>
       <div className="flex min-h-0 flex-col overflow-y-auto p-5">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start justify-between gap-2 pr-7">
           <div>
             <DialogTitle className="text-base">{p.prompt || "Untitled"}</DialogTitle>
             <DialogDescription className="mt-0.5">{timeAgo(gen.createdAt)}</DialogDescription>

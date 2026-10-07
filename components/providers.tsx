@@ -13,7 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <EngineTicker />
       {children}
       <PaywallDialog />
-      <Toaster theme="dark" position="bottom-right" />
+      <Toaster theme="dark" position="top-right" offset={{ top: 64 }} mobileOffset={{ top: 64 }} />
     </TooltipProvider>
   );
 }

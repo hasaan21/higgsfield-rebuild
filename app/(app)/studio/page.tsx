@@ -1,16 +1,34 @@
 "use client";
 
+import { useEffect } from "react";
 import { RotateCcw, Shuffle, SlidersHorizontal, X } from "lucide-react";
+import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { CreationDrawer } from "@/components/studio/creation-drawer";
 import { ModeToggle } from "@/components/studio/mode-toggle";
 import { PromptBar } from "@/components/studio/prompt-bar";
 import { Stage } from "@/components/studio/stage";
+import { getModel, MODELS } from "@/lib/catalog/models";
+import { PLAN_BY_ID } from "@/lib/catalog/plans";
+import { useUser } from "@/lib/hooks";
+import { canUseModel } from "@/lib/pricing";
 import { useStudio } from "@/lib/stores/studio";
 
 export default function StudioPage() {
   const remix = useStudio((s) => s.remix);
   const { clearRemix, reset } = useStudio.getState();
+  const planId = useUser()?.planId;
+
+  useEffect(() => {
+    const { params, remix } = useStudio.getState();
+    if (!planId || remix) return;
+    const model = getModel(params.modelId);
+    if (canUseModel(model, planId)) return;
+    const fallback = MODELS.find((m) => m.mode === model.mode && canUseModel(m, planId));
+    if (!fallback) return;
+    useStudio.getState().setModel(fallback.id);
+    toast(`Switched to ${fallback.name}`, { description: `${model.name} needs ${PLAN_BY_ID[model.minPlan].name}. Pick it any time from the model menu.` });
+  }, [planId]);
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)]">
@@ -22,7 +40,7 @@ export default function StudioPage() {
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-border/60 px-4 py-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2">
           <Sheet>
             <SheetTrigger asChild>
               <button className="flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs lg:hidden">
@@ -40,7 +58,7 @@ export default function StudioPage() {
           </Sheet>
           <ModeToggle />
           {remix && (
-            <div className="ml-auto flex min-w-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 py-1 pr-1 pl-3 text-xs text-primary">
+            <div className="ml-auto flex max-w-full min-w-0 items-center gap-2 rounded-full border border-primary/30 bg-primary/10 py-1 pr-1 pl-3 text-xs text-primary">
               <Shuffle className="size-3.5 shrink-0" />
               <span className="truncate">
                 Remixing “{remix.title}” by @{remix.author}

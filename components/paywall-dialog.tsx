@@ -14,6 +14,7 @@ import { toast } from "sonner";
 export function PaywallDialog() {
   const { reason, close } = usePaywall();
   const topUp = useSession((s) => s.topUp);
+  const setPlan = useSession((s) => s.setPlan);
   const router = useRouter();
   if (!reason) return null;
 
@@ -52,9 +53,21 @@ export function PaywallDialog() {
                 <li key={h}>• {h}</li>
               ))}
             </ul>
-            <Button asChild onClick={close}>
-              <Link href="/pricing/">Compare plans</Link>
-            </Button>
+            <div className="grid gap-2">
+              <Button
+                onClick={() => {
+                  const plan = PLAN_BY_ID[reason.requiredPlan];
+                  setPlan(plan.id);
+                  toast.success(`You're on ${plan.name}`, { description: `${formatCredits(plan.credits)} credits added. Demo checkout — no payment taken.` });
+                  close();
+                }}
+              >
+                Upgrade to {PLAN_BY_ID[reason.requiredPlan].name} · ${PLAN_BY_ID[reason.requiredPlan].priceMonthly}/mo
+              </Button>
+              <Button variant="ghost" asChild onClick={close}>
+                <Link href="/pricing/">Compare plans</Link>
+              </Button>
+            </div>
           </>
         )}
 

@@ -164,7 +164,7 @@ export function QueuePanel() {
       </aside>
       <Sheet>
         <SheetTrigger asChild>
-          <Button size="sm" variant="secondary" className="fixed right-4 bottom-4 z-30 gap-2 shadow-lg xl:hidden">
+          <Button size="sm" variant="secondary" className="fixed top-1/2 right-0 z-30 -translate-y-1/2 gap-2 rounded-r-none border border-r-0 border-border shadow-lg xl:hidden">
             <ListVideo className="size-4" /> Queue
             {activeCount > 0 && <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">{activeCount}</span>}
           </Button>
